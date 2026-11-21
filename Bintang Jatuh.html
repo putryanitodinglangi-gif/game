@@ -1,0 +1,355 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Bintang Jatuh</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap">
+<style>
+/* Layout: satu kolom tengah. Judul, papan skor, lalu panggung game 2:3 dengan overlay mulai/selesai. */
+:root {
+  --bg: #0b1020;
+  --panel: #151b34;
+  --line: #2b3560;
+  --ink: #edebff;
+  --muted: #9aa3c7;
+  --star: #ffd166;
+  --danger: #ff5c7a;
+  --rock: #c2415f;
+  --ok: #5ce1c6;
+  --sky-top: #0b1020;
+  --sky-bot: #2a2250;
+  --display: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --body: "Inter", system-ui, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 16px;
+  line-height: 1.5;
+  padding-block: 24px 32px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 440px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+.top h1 { margin: 0; font-family: var(--display); font-weight: 700; font-size: clamp(30px, 8vw, 40px); letter-spacing: -0.02em; line-height: 1.05; }
+.top p { margin: 4px 0 0; color: var(--muted); font-size: 15px; }
+.hud { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.stat { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.k { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.v { font-family: var(--display); font-weight: 700; font-size: 22px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.lives { display: flex; gap: 5px; align-items: center; min-height: 26px; }
+.life { width: 13px; height: 13px; border-radius: 50%; background: var(--danger); }
+.life.off { background: var(--line); }
+.stage { position: relative; width: min(100%, 440px, max(280px, calc((100dvh - 250px) * 0.6667))); aspect-ratio: 2 / 3; margin: 0 auto; border-radius: 20px; overflow: hidden; border: 1px solid var(--line); background: var(--sky-top); }
+canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: none; }
+.overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; text-align: center; background: rgba(11, 16, 32, 0.74); backdrop-filter: blur(3px); }
+.overlay h2 { margin: 0; font-family: var(--display); font-weight: 700; font-size: clamp(30px, 8vw, 40px); letter-spacing: -0.02em; line-height: 1.05; color: var(--star); }
+.overlay p { margin: 0; max-width: 300px; color: var(--ink); font-size: 16px; }
+button.go { margin-top: 8px; min-height: 48px; padding: 12px 30px; border: 0; border-radius: 999px; background: var(--star); color: #1a1206; font-family: var(--body); font-size: 16px; font-weight: 600; cursor: pointer; }
+button.go:hover { filter: brightness(1.08); }
+button.go:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; font-size: 14px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+.hint { margin: 0; text-align: center; color: var(--muted); font-size: 14px; }
+</style>
+
+<main class="wrap">
+  <header class="top">
+    <h1>Bintang Jatuh</h1>
+    <p>Tangkap bintang dengan mangkuk, hindari meteor.</p>
+  </header>
+
+  <section class="hud" aria-label="Papan skor">
+    <div class="stat"><span class="k">Skor</span><span class="v" id="score">0</span></div>
+    <div class="stat"><span class="k">Terbaik</span><span class="v" id="best">0</span></div>
+    <div class="stat"><span class="k">Kombo</span><span class="v" id="combo">×1</span></div>
+    <div class="stat"><span class="k">Nyawa</span><span class="lives" id="lives" role="img" aria-label="3 nyawa"><i class="life"></i><i class="life"></i><i class="life"></i></span></div>
+  </section>
+
+  <div class="stage">
+    <canvas id="c" aria-label="Area permainan Bintang Jatuh"></canvas>
+    <div class="overlay" id="ov">
+      <h2 id="ovTitle">Bintang Jatuh</h2>
+      <p id="ovText">Geser untuk menggerakkan mangkuk. Tangkap bintang beruntun untuk kombo sampai ×5.</p>
+      <button class="go" id="startBtn" type="button">Mulai main</button>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span><i class="dot" style="background: var(--star)"></i>Bintang +10</span>
+    <span><i class="dot" style="background: var(--ok)"></i>Bintang langka +30</span>
+    <span><i class="dot" style="background: var(--rock)"></i>Meteor -1 nyawa</span>
+  </div>
+  <p class="hint">Geser jari atau mouse di area game. Di keyboard: panah kiri/kanan atau A dan D.</p>
+</main>
+
+<script>
+(function () {
+  var W = 360, H = 540;
+  var cv = document.getElementById('c');
+  var ctx = cv.getContext('2d');
+  var scale = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+  cv.width = W * scale; cv.height = H * scale;
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+
+  var cs = getComputedStyle(document.documentElement);
+  function tok(k) { return cs.getPropertyValue(k).trim(); }
+  var C = { star: tok('--star'), ok: tok('--ok'), danger: tok('--danger'), rock: tok('--rock'), ink: tok('--ink'), muted: tok('--muted'), top: tok('--sky-top'), bot: tok('--sky-bot') };
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var el = {
+    score: document.getElementById('score'), best: document.getElementById('best'),
+    combo: document.getElementById('combo'), lives: document.getElementById('lives'),
+    ov: document.getElementById('ov'), title: document.getElementById('ovTitle'),
+    text: document.getElementById('ovText'), btn: document.getElementById('startBtn')
+  };
+
+  var best = 0;
+  try { best = parseInt(localStorage.getItem('bintang-jatuh-best') || '0', 10) || 0; } catch (e) {}
+  el.best.textContent = best;
+
+  var bowl = { w: 76, h: 30, y: H - 70 };
+  var S = { mode: 'idle', score: 0, lives: 3, combo: 0, level: 1, spawn: 0, items: [], parts: [], x: W / 2, tx: W / 2, shake: 0, flash: 0, t: 0 };
+  var keys = { l: false, r: false };
+
+  var bg = [];
+  for (var i = 0; i < 70; i++) bg.push({ x: Math.random() * W, y: Math.random() * H, r: Math.random() * 1.3 + 0.3, ph: Math.random() * 6.28, sp: 0.5 + Math.random() * 1.5 });
+
+  function mult() { return Math.min(5, 1 + Math.floor(S.combo / 5)); }
+
+  function hud() {
+    el.score.textContent = S.score;
+    el.combo.textContent = '×' + mult();
+    var dots = el.lives.children;
+    for (var i = 0; i < dots.length; i++) dots[i].className = i < S.lives ? 'life' : 'life off';
+    el.lives.setAttribute('aria-label', S.lives + ' nyawa');
+  }
+
+  function reset() {
+    S.score = 0; S.lives = 3; S.combo = 0; S.level = 1; S.spawn = 0;
+    S.items = []; S.parts = []; S.shake = 0; S.flash = 0;
+    hud();
+  }
+
+  function start() {
+    reset();
+    S.mode = 'play';
+    el.ov.hidden = true;
+  }
+
+  function over() {
+    S.mode = 'over';
+    var record = S.score > best;
+    if (record) {
+      best = S.score;
+      el.best.textContent = best;
+      try { localStorage.setItem('bintang-jatuh-best', String(best)); } catch (e) {}
+    }
+    el.title.textContent = 'Permainan selesai';
+    el.text.textContent = 'Skor ' + S.score + '. ' + (record && S.score > 0 ? 'Rekor baru!' : 'Terbaik ' + best + '.');
+    el.btn.textContent = 'Main lagi';
+    el.ov.hidden = false;
+    el.btn.focus();
+  }
+
+  el.btn.addEventListener('click', start);
+
+  function toX(e) {
+    var r = cv.getBoundingClientRect();
+    return (e.clientX - r.left) * (W / r.width);
+  }
+  cv.addEventListener('pointerdown', function (e) { S.tx = toX(e); try { cv.setPointerCapture(e.pointerId); } catch (x) {} });
+  cv.addEventListener('pointermove', function (e) { S.tx = toX(e); });
+
+  window.addEventListener('keydown', function (e) {
+    var k = e.key;
+    if (k === 'ArrowLeft' || k === 'a' || k === 'A') { keys.l = true; if (S.mode === 'play') e.preventDefault(); }
+    if (k === 'ArrowRight' || k === 'd' || k === 'D') { keys.r = true; if (S.mode === 'play') e.preventDefault(); }
+  });
+  window.addEventListener('keyup', function (e) {
+    var k = e.key;
+    if (k === 'ArrowLeft' || k === 'a' || k === 'A') keys.l = false;
+    if (k === 'ArrowRight' || k === 'd' || k === 'D') keys.r = false;
+  });
+
+  function spawnItem() {
+    var lvl = S.level;
+    var roll = Math.random();
+    var pMeteor = Math.min(0.4, 0.18 + lvl * 0.03);
+    var type = roll < pMeteor ? 'meteor' : (roll < pMeteor + 0.09 ? 'gold' : 'star');
+    S.items.push({
+      type: type, x: 22 + Math.random() * (W - 44), y: -24,
+      vy: 120 + lvl * 20 + Math.random() * 45,
+      r: type === 'gold' ? 15 : (type === 'meteor' ? 14 : 12),
+      rot: Math.random() * 6.28, spin: (Math.random() - 0.5) * 3,
+      shape: [0, 1, 2, 3, 4, 5, 6].map(function () { return 0.72 + Math.random() * 0.4; })
+    });
+  }
+
+  function burst(x, y, color, n) {
+    for (var i = 0; i < n; i++) {
+      var a = Math.random() * 6.28, s = 40 + Math.random() * 140;
+      S.parts.push({ x: x, y: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 30, life: 0.5 + Math.random() * 0.3, max: 0.8, color: color, r: 1.5 + Math.random() * 2 });
+    }
+  }
+  function floatText(x, y, text, color) {
+    S.parts.push({ x: x, y: y, vx: 0, vy: -50, life: 0.8, max: 0.8, color: color, text: text });
+  }
+
+  function update(dt) {
+    S.t += dt;
+    for (var i = 0; i < bg.length; i++) { bg[i].y += bg[i].sp * 6 * dt; if (bg[i].y > H) { bg[i].y = 0; bg[i].x = Math.random() * W; } }
+
+    if (keys.l) S.tx -= 440 * dt;
+    if (keys.r) S.tx += 440 * dt;
+    S.tx = Math.max(bowl.w / 2, Math.min(W - bowl.w / 2, S.tx));
+    S.x += (S.tx - S.x) * Math.min(1, dt * 18);
+
+    var playing = S.mode === 'play';
+    S.spawn -= dt;
+    if (S.spawn <= 0) {
+      if (playing) { spawnItem(); S.spawn = Math.max(0.3, 0.95 - S.level * 0.07) * (0.7 + Math.random() * 0.6); }
+      else if (S.mode === 'idle' || S.mode === 'over') { S.items.push({ type: 'star', x: 22 + Math.random() * (W - 44), y: -24, vy: 90 + Math.random() * 40, r: 12, rot: Math.random() * 6.28, spin: 1, shape: [] }); S.spawn = 0.7; }
+    }
+
+    for (var j = S.items.length - 1; j >= 0; j--) {
+      var it = S.items[j];
+      it.y += it.vy * dt; it.rot += it.spin * dt;
+      var hit = playing && it.y + it.r >= bowl.y && it.y - it.r <= bowl.y + 16 && Math.abs(it.x - S.x) <= bowl.w / 2 + it.r * 0.4;
+      if (hit) {
+        S.items.splice(j, 1);
+        if (it.type === 'meteor') {
+          S.lives--; S.combo = 0; S.flash = 0.35; S.shake = reduce ? 0 : 0.3;
+          burst(it.x, it.y, C.danger, 18);
+          hud();
+          if (S.lives <= 0) over();
+        } else {
+          S.combo++;
+          var pts = (it.type === 'gold' ? 30 : 10) * mult();
+          S.score += pts;
+          S.level = 1 + Math.floor(S.score / 150);
+          burst(it.x, it.y, it.type === 'gold' ? C.ok : C.star, 12);
+          floatText(it.x, it.y - 10, '+' + pts, it.type === 'gold' ? C.ok : C.star);
+          hud();
+        }
+        continue;
+      }
+      if (it.y > H + 30) {
+        if (playing && it.type !== 'meteor' && S.combo > 0) { S.combo = 0; hud(); }
+        S.items.splice(j, 1);
+      }
+    }
+
+    for (var k = S.parts.length - 1; k >= 0; k--) {
+      var p = S.parts[k];
+      p.life -= dt;
+      if (p.life <= 0) { S.parts.splice(k, 1); continue; }
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      if (!p.text) p.vy += 220 * dt;
+    }
+    if (S.flash > 0) S.flash -= dt;
+    if (S.shake > 0) S.shake -= dt;
+  }
+
+  function starPath(x, y, r, rot) {
+    ctx.beginPath();
+    for (var i = 0; i < 10; i++) {
+      var a = rot + i * Math.PI / 5 - Math.PI / 2;
+      var rr = i % 2 ? r * 0.45 : r;
+      var X = x + Math.cos(a) * rr, Y = y + Math.sin(a) * rr;
+      if (i) ctx.lineTo(X, Y); else ctx.moveTo(X, Y);
+    }
+    ctx.closePath();
+  }
+
+  function draw() {
+    ctx.save();
+    if (S.shake > 0) ctx.translate((Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8);
+
+    var g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, C.top); g.addColorStop(1, C.bot);
+    ctx.fillStyle = g; ctx.fillRect(-10, -10, W + 20, H + 20);
+
+    // bulan
+    var mg = ctx.createRadialGradient(W - 70, 80, 6, W - 70, 80, 70);
+    mg.addColorStop(0, 'rgba(237, 235, 255, 0.35)'); mg.addColorStop(1, 'rgba(237, 235, 255, 0)');
+    ctx.fillStyle = mg; ctx.fillRect(W - 140, 10, 140, 140);
+    ctx.fillStyle = C.ink; ctx.beginPath(); ctx.arc(W - 70, 80, 22, 0, 6.28); ctx.fill();
+    ctx.fillStyle = C.top; ctx.beginPath(); ctx.arc(W - 61, 74, 19, 0, 6.28); ctx.fill();
+
+    for (var i = 0; i < bg.length; i++) {
+      var b = bg[i];
+      ctx.globalAlpha = 0.35 + 0.45 * Math.abs(Math.sin(S.t * b.sp + b.ph));
+      ctx.fillStyle = C.ink; ctx.fillRect(b.x, b.y, b.r, b.r);
+    }
+    ctx.globalAlpha = 1;
+
+    for (var j = 0; j < S.items.length; j++) {
+      var it = S.items[j];
+      if (it.type === 'meteor') {
+        var tg = ctx.createLinearGradient(0, it.y - it.r * 4, 0, it.y);
+        tg.addColorStop(0, 'rgba(255, 92, 122, 0)'); tg.addColorStop(1, 'rgba(255, 92, 122, 0.55)');
+        ctx.fillStyle = tg; ctx.fillRect(it.x - it.r * 0.5, it.y - it.r * 4, it.r, it.r * 4);
+        ctx.beginPath();
+        for (var n = 0; n < 7; n++) {
+          var a = it.rot + n * 6.2832 / 7;
+          var X = it.x + Math.cos(a) * it.r * it.shape[n], Y = it.y + Math.sin(a) * it.r * it.shape[n];
+          if (n) ctx.lineTo(X, Y); else ctx.moveTo(X, Y);
+        }
+        ctx.closePath();
+        ctx.fillStyle = C.rock; ctx.fill();
+        ctx.lineWidth = 2; ctx.strokeStyle = C.danger; ctx.stroke();
+      } else {
+        var col = it.type === 'gold' ? C.ok : C.star;
+        ctx.shadowColor = col; ctx.shadowBlur = 14;
+        starPath(it.x, it.y, it.r, it.rot);
+        ctx.fillStyle = col; ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+    }
+
+    // mangkuk
+    var bx = S.x, by = bowl.y;
+    var bgd = ctx.createLinearGradient(0, by, 0, by + bowl.h);
+    bgd.addColorStop(0, '#f5e7ff'); bgd.addColorStop(1, '#8f7bd6');
+    ctx.beginPath(); ctx.ellipse(bx, by, bowl.w / 2, bowl.h, 0, 0, Math.PI); ctx.closePath();
+    ctx.fillStyle = bgd; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = C.ink; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(bx - bowl.w / 2, by); ctx.lineTo(bx + bowl.w / 2, by); ctx.stroke();
+
+    for (var k = 0; k < S.parts.length; k++) {
+      var p = S.parts[k];
+      ctx.globalAlpha = Math.max(0, p.life / p.max);
+      if (p.text) {
+        ctx.font = '700 17px "Space Grotesk", sans-serif'; ctx.textAlign = 'center';
+        ctx.fillStyle = p.color; ctx.fillText(p.text, p.x, p.y);
+      } else {
+        ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.28); ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+
+    if (S.mode === 'play') {
+      ctx.font = '600 13px Inter, sans-serif'; ctx.textAlign = 'left';
+      ctx.fillStyle = C.muted; ctx.fillText('Level ' + S.level, 14, 24);
+    }
+    if (S.flash > 0) { ctx.fillStyle = 'rgba(255, 92, 122, ' + (S.flash * 0.9) + ')'; ctx.fillRect(-10, -10, W + 20, H + 20); }
+    ctx.restore();
+  }
+
+  var last = performance.now();
+  function frame(now) {
+    var dt = Math.min(0.033, (now - last) / 1000);
+    last = now;
+    update(dt);
+    draw();
+    requestAnimationFrame(frame);
+  }
+  hud();
+  requestAnimationFrame(frame);
+})();
+</script>
+
+</body></html>
